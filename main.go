@@ -62,23 +62,24 @@ func main() {
 	// fmt.Println(weather)
 	location, current, hours := weather.Location, weather.Current, weather.Forecast.Forecastday[0].Hour
 	fmt.Printf(
-		"%s, %s: %.0f°C, %s\n",
+		"%s, %s: %.0f°C, %s, %s\n",
 		location.Country,
 		location.Name,
 		current.TempC,
+		time.Now().Format("15:04"),
 		current.Condition.Text,
 	)
 	for _, hour := range hours {
 		date := time.Unix(hour.TimeEpoch, 0)
-		if date.Before(time.Now()) {
+		if date.Before(time.Now().Truncate(time.Hour)) {
 			continue
 		}
 		message := fmt.Sprintf(
-			"%s - %.0f°C, %.0f%%, %s\n",
+			"%s - %.0f°C, Sky: %s, Chances of Rain: %.0f%%\n",
 			date.Format("15:04"),
 			hour.TempC,
-			hour.ChanceOfRain,
 			hour.Condition.Text,
+			hour.ChanceOfRain,
 		)
 		if hour.ChanceOfRain < 40 {
 			color.Cyan(message)
