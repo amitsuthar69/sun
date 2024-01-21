@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -37,29 +37,55 @@ type Weather struct {
 }
 
 func main() {
+	var wg sync.WaitGroup
+
 	loc := "mumbai"
 	if len(os.Args) >= 2 {
 		loc = os.Args[1]
 	}
 	url := "http://api.weatherapi.com/v1/forecast.json?key=588129751b7940ca824160458242001&q=" + loc + "&days=1&aqi=no&alerts=no"
-	res, err := http.Get(url)
+
+	ch := make(chan Weather, 1)
+
+	wg.Add(1)
+	go func() { // a goroutine for the HTTP request
+		defer wg.Done()
+		weather, err := fetchWeather(url)
+		if err != nil {
+			panic(err)
+		}
+		ch <- weather
+	}()
+
+	wg.Add(1)
+	go func() { // a goroutine for unmarshalling JSON
+		defer wg.Done()
+		weather := <-ch
+		printweather(weather)
+	}()
+
+	wg.Wait()
+}
+
+func fetchWeather(url string) (Weather, error) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	res, err := client.Get(url)
 	if err != nil {
-		panic(err)
+		return Weather{}, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		panic("api error")
-	}
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		panic("error reading response body")
+	if res.StatusCode != http.StatusOK {
+		return Weather{}, fmt.Errorf("API error: %d", res.StatusCode)
 	}
 	var weather Weather
-	err = json.Unmarshal(body, &weather)
-	if err != nil {
-		panic(err)
+	decoder := json.NewDecoder(res.Body)
+	if err := decoder.Decode(&weather); err != nil {
+		return Weather{}, err
 	}
-	// fmt.Println(weather)
+	return weather, nil
+}
+
+func printweather(weather Weather) {
 	location, current, hours := weather.Location, weather.Current, weather.Forecast.Forecastday[0].Hour
 	fmt.Printf(
 		"%s, %s: %.0f°C, %s, %s\n",
